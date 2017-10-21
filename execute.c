@@ -20,8 +20,43 @@ void each_cmd(SHELLCMD *t){
 	}
 	
 	else if(pid == 0){
-	        printf("pid == 0 -> execv() failed\n");
-        	exit(EXIT_FAILURE);	
+
+//		char *step1_arguments[20];
+//		char *step2_arguments[20];
+//		int a = 0, b = 0;
+//		step1_arguments[a++] = "/bin/ls";
+//		step1_arguments[a++] = NULL;		
+//		step2_arguments[b++] = "/usr/bin/cal";
+//		step2_arguments[a++] = NULL;
+//		step2_arguments[b++] = "-y";
+//	        execv(step1_arguments[0],step1_arguments);
+//	        execv(step2_arguments[0],step2_arguments);
+	
+		if(t->argv[0][0] == '/'){
+			execv(t->argv[0],t->argv);
+			printf("pid == 0 -> execv() failed\n");
+	        	exit(EXIT_FAILURE);	
+		}
+		else{
+			int cmd_max_len = strlen(PATH) + strlen(t->argv[0]) + strlen("/");
+			char cmd[cmd_max_len];
+			
+			const char s[2] = ":";
+			char *token;
+			
+			token = strtok(PATH,s);
+			while(token != NULL){
+				memset(cmd, '\0', cmd_max_len);
+				strcat(cmd, token);
+				strcat(cmd, "/");
+				strcat(cmd, t->argv[0]);
+	//			printf("%s\n",cmd);
+				execv(cmd, t->argv);
+				token = strtok(NULL, s);
+			}
+			printf("pid == 0 -> execv() failed\n");
+	        	exit(EXIT_FAILURE);	
+		}
 	}
 	else{
 		int status;
