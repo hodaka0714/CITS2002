@@ -75,14 +75,45 @@ void each_cmd(SHELLCMD *t){
 
 int execute_shellcmd(SHELLCMD *t)
 {
-    int  exitstatus;
-    if(t == NULL) {			// hmmmm, that's a problem
-	exitstatus	= EXIT_FAILURE;
-    }
-    else {				// normal, exit commands
-	each_cmd(t);
-	exitstatus	= EXIT_SUCCESS;
-    }
+	int  exitstatus;
+	if(t == NULL) {			// hmmmm, that's a problem
+		exitstatus	= EXIT_FAILURE;
+	}
+//	else if(strcmp(t->argv[0], "exit")){
+//		int tmp_exitstatus = 0;//prev_exitstatus;
+//		printf("\'exit\' is executed.");
+//		if(strcmp(t->argv[1],"EXIT_SUCCESS") == 0) strcpy(t->argv[1],"0\0");
+//		if(strcmp(t->argv[1],"EXIT_FAILURE") == 0) strcpy(t->argv[1],"1\0");
+//		if(t->argv[1][0] == '0' || t->argv[1][0] == '1'){ 
+//		// if an appropriate argument was provided
+//			int argv1 = atoi(t->argv[1]);
+//			printf("%d\n",argv1);
+//			tmp_exitstatus = argv1;
+//			exitstatus	= EXIT_SUCCESS;	
+//			exit(tmp_exitstatus);
+//		}
+//		else if(strcmp(t->argv[1],"\0") == 0){ // if there was no argument
+//			exitstatus	= EXIT_SUCCESS;	
+//			exit(tmp_exitstatus); //exit-status of the recently executed command is used
+//		}
+//		else{ // if the argument was wrong
+//			exitstatus	= EXIT_FAILURE;	
+//			exit(tmp_exitstatus); //exit-status of the recently executed command is used
+//		}
+//	}
+//	else if(strcmp(t->argv[0], "cd")){
+//		printf("\'cd\' is executed.");
+//		if(t->argv[1] > 0){
+//			
+//		}
+//		exitstatus	= EXIT_SUCCESS;	
+//	}
+	else {				// normal, exit commands
+		each_cmd(t);
+//		printf("%d\n",EXIT_FAILURE);
+		exitstatus	= EXIT_SUCCESS;
+	}
 
-    return exitstatus;
+//	prev_exitstatus = exitstatus;
+	return exitstatus;
 }
