@@ -46,67 +46,8 @@ void step1_2(){
 }
 
 //This function create child process.
-void each_cmd(SHELLCMD *t){
-	int pid = fork();
-
-	// ensure that a new process was created
-	if(pid == -1) {                             // process creation failed
-		printf("fork() failed. (pid == -1)\n" );
-		exit(EXIT_FAILURE);
-	}	
-	else if(pid == 0){
-		bool hasslash = containsslash(t->argv[0]);
-		int cmd_max_len = strlen(PATH) + strlen(t->argv[0]) + strlen("/");
-		char cmd[cmd_max_len];
-		if(hasslash){
-			if(t->argv[0][0] == '/'){
-				execv(t->argv[0],t->argv);
-			}else{
-				strcat(cmd,"/");
-				strcat(cmd,t->argv[0]);
-				strcpy(t->argv[0],cmd);
-				execv(t->argv[0],t->argv);
-			}
-			printf("execv() failed. (pid == 0)\n");
-	        	exit(EXIT_FAILURE);	
-		}
-		else{
-			
-			const char s[2] = ":";
-			char *token;
-			
-			token = strtok(PATH,s);
-			while(token != NULL){
-				memset(cmd, '\0', cmd_max_len);
-				strcat(cmd, token);
-				strcat(cmd, "/");
-				strcat(cmd, t->argv[0]);
-	//			printf("%s\n",cmd);
-				execv(cmd, t->argv);
-				token = strtok(NULL, s);
-			}
-			printf("execv() failed. (pid == 0)\n");
-	        	exit(EXIT_FAILURE);	
-		}
-	}
-	else{
-		int status;
-		while(wait(&status) > 0){
-			
-		}	
-		
-	}
-	fflush(stdout);
-}
-
-
-//  THIS FUNCTION SHOULD TRAVERSE THE COMMAND-TREE and EXECUTE THE COMMANDS
-//  THAT IT HOLDS, RETURNING THE APPROPRIATE EXIT-STATUS.
-//  READ print_shellcmd0() IN globals.c TO SEE HOW TO TRAVERSE THE COMMAND-TREE
-
-int execute_shellcmd(SHELLCMD *t)
-{
-	int  exitstatus;
+int cmd_command(SHELLCMD *t){
+	int exitstatus;
 	if(t == NULL) {			// hmmmm, that's a problem
 		exitstatus	= EXIT_FAILURE;
 	}
@@ -146,7 +87,9 @@ int execute_shellcmd(SHELLCMD *t)
 				char CDPATH_array[strlen(CDPATH)];// convert from *CDPATH to CDPATH_array[]	
 				strcpy(CDPATH_array,CDPATH);
 				const char s[2] = ":";
-				char *token;			printf("CDPATH now is \"%s\".\n",CDPATH);
+				char *token;
+//				printf("CDPATH now is \"%s\".\n",CDPATH);
+				int i;				
 				token = strtok(CDPATH_array,s);
 				while(token != NULL){
 					memset(cd_cmd, '\0', cd_cmd_max_len);
@@ -155,7 +98,8 @@ int execute_shellcmd(SHELLCMD *t)
 					strcat(cd_cmd, token);
 					strcat(cd_cmd, t->argv[1]);
 					printf("chdir(%s) is executed.\n",cd_cmd);
-					chdir(cd_cmd);
+					i = chdir(cd_cmd);
+					printf("%d\n",i);
 					token = strtok(NULL, s);
 				}	
 			}else{	// if the command has "/" (i.g. "cd /desktop" and "cd desktop/directory")
@@ -196,8 +140,87 @@ int execute_shellcmd(SHELLCMD *t)
 		(t->argv)--;
 	}
 	else {				// normal, exit commands
-		each_cmd(t);
+		int pid = fork();
+	
+		// ensure that a new process was created
+		if(pid == -1) {                             // process creation failed
+			printf("fork() failed. (pid == -1)\n" );
+			exit(EXIT_FAILURE);
+		}	
+		else if(pid == 0){
+			bool hasslash = containsslash(t->argv[0]);
+			int cmd_max_len = strlen(PATH) + strlen(t->argv[0]) + strlen("/");
+			char cmd[cmd_max_len];
+			if(hasslash){
+				if(t->argv[0][0] == '/'){
+					execv(t->argv[0],t->argv);
+				}else{
+					strcat(cmd,"/");
+					strcat(cmd,t->argv[0]);
+					strcpy(t->argv[0],cmd);
+					execv(t->argv[0],t->argv);
+				}
+				printf("execv() failed. (pid == 0)\n");
+		        	exit(EXIT_FAILURE);	
+			}
+			else{	
+				const char s[2] = ":";
+				char *token;
+				
+				token = strtok(PATH,s);
+				while(token != NULL){
+					memset(cmd, '\0', cmd_max_len);
+					strcat(cmd, token);
+					strcat(cmd, "/");
+					strcat(cmd, t->argv[0]);
+		//			printf("%s\n",cmd);
+					execv(cmd, t->argv);
+					token = strtok(NULL, s);
+				}
+				printf("execv() failed. (pid == 0)\n");
+		        	exit(EXIT_FAILURE);	
+			}
+		}
+		else{
+			int status;
+			while(wait(&status) > 0){
+				
+			}	
+			
+		}
+		fflush(stdout);
 		exitstatus	= EXIT_SUCCESS;
+	}
+	return exitstatus;
+}
+
+//  THIS FUNCTION SHOULD TRAVERSE THE COMMAND-TREE and EXECUTE THE COMMANDS
+//  THAT IT HOLDS, RETURNING THE APPROPRIATE EXIT-STATUS.
+//  READ print_shellcmd0() IN globals.c TO SEE HOW TO TRAVERSE THE COMMAND-TREE
+
+int execute_shellcmd(SHELLCMD *t)
+{
+	int exitstatus = 0;
+	int exitstatus1, exitstatus2;
+	if(t->type == CMD_COMMAND){
+		exitstatus = cmd_command(t);
+	}else if(t->type == CMD_SEMICOLON){
+		exitstatus = execute_shellcmd(t->left);
+		exitstatus = execute_shellcmd(t->right);
+	}else if(t->type == CMD_AND){
+		exitstatus1 = execute_shellcmd(t->left);
+		exitstatus2 = execute_shellcmd(t->right);
+		exitstatus = exitstatus1 * exitstatus2;
+	}else if(t->type == CMD_OR){
+		exitstatus1 = execute_shellcmd(t->left);
+		exitstatus2 = execute_shellcmd(t->right);
+		if(exitstatus1 == 1 || exitstatus2 == 1){
+			exitstatus = 1;
+		}else{
+			exitstatus = 0;
+		}
+	}else if(t->type == CMD_SUBSHELL){
+		exitstatus = execute_shellcmd(t->left);
 	}
 
 //	prev_exitstatus = exitstatus;
