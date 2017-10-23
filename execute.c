@@ -1,5 +1,5 @@
 #include "myshell.h"
-
+#include <sys/time.h>
 /*
    CITS2002 Project 2 2017
    Name(s):		student-name1 (, student-name2)
@@ -29,6 +29,22 @@ bool containsslash(char *str){
 	return judge;
 }
 
+void step1_1(){
+		char *step1_arguments[20];
+		int a = 0;
+		step1_arguments[a++] = "/bin/ls";
+		step1_arguments[a++] = NULL;		
+	        execv(step1_arguments[0],step1_arguments);
+}
+void step1_2(){
+		char *step2_arguments[20];
+		int b = 0;
+		step2_arguments[b++] = "/usr/bin/cal";
+		step2_arguments[b++] = NULL;
+		step2_arguments[b++] = "-y";
+	        execv(step2_arguments[0],step2_arguments);
+}
+
 //This function create child process.
 void each_cmd(SHELLCMD *t){
 	int pid = fork();
@@ -37,20 +53,8 @@ void each_cmd(SHELLCMD *t){
 	if(pid == -1) {                             // process creation failed
 		printf("fork() failed. (pid == -1)\n" );
 		exit(EXIT_FAILURE);
-	}
-	
+	}	
 	else if(pid == 0){
-
-//		char *step1_arguments[20];
-//		char *step2_arguments[20];
-//		int a = 0, b = 0;
-//		step1_arguments[a++] = "/bin/ls";
-//		step1_arguments[a++] = NULL;		
-//		step2_arguments[b++] = "/usr/bin/cal";
-//		step2_arguments[a++] = NULL;
-//		step2_arguments[b++] = "-y";
-//	        execv(step1_arguments[0],step1_arguments);
-//	        execv(step2_arguments[0],step2_arguments);
 		bool hasslash = containsslash(t->argv[0]);
 		int cmd_max_len = strlen(PATH) + strlen(t->argv[0]) + strlen("/");
 		char cmd[cmd_max_len];
@@ -135,28 +139,63 @@ int execute_shellcmd(SHELLCMD *t)
 			chdir(HOME);	
 		}
 		else{
-			int cmd_max_len = strlen(CDPATH) + strlen(t->argv[0]);
-			char cmd[cmd_max_len];
+			int cd_cmd_max_len = strlen(CDPATH) + strlen(t->argv[0]);
+			char cd_cmd[cd_cmd_max_len];
 			bool hasslash = containsslash(t->argv[1]);
-			if(!hasslash){
+			if(!hasslash){	// if the command doesn't have "/" (i.g. cd Desktop)
+				char CDPATH_array[strlen(CDPATH)];// convert from *CDPATH to CDPATH_array[]	
+				strcpy(CDPATH_array,CDPATH);
 				const char s[2] = ":";
-				char *token;
-			
-				token = strtok(CDPATH,s);
+				char *token;			printf("CDPATH now is \"%s\".\n",CDPATH);
+				token = strtok(CDPATH_array,s);
 				while(token != NULL){
-					memset(cmd, '\0', cmd_max_len);
-					strcat(cmd, token);
-					strcat(cmd, t->argv[0]);
-//					printf("%s\n",cmd);
-					chdir(cmd);
+					memset(cd_cmd, '\0', cd_cmd_max_len);
+					strcat(cd_cmd, HOME);
+					strcat(cd_cmd, "/");
+					strcat(cd_cmd, token);
+					strcat(cd_cmd, t->argv[1]);
+					printf("chdir(%s) is executed.\n",cd_cmd);
+					chdir(cd_cmd);
 					token = strtok(NULL, s);
 				}	
+			}else{	// if the command has "/" (i.g. "cd /desktop" and "cd desktop/directory")
+				memset(cd_cmd, '\0', cd_cmd_max_len);
+				strcat(cd_cmd, HOME);
+				if(t->argv[1][0] != '/'){
+					strcat(cd_cmd, "/");
+				}
+				strcat(cd_cmd, t->argv[1]);
+				printf("chdir(%s) is executed.\n",cd_cmd);
+				chdir(cd_cmd);	
 			}
 		}
 		exitstatus	= EXIT_SUCCESS;	
 	}
+	else if(strcmp(t->argv[0], "time") == 0){
+	        struct	timeval	start;
+	        struct	timeval	end;
+
+	        //for time difference
+	        unsigned long diff;
+
+		(t->argc)--;
+		(t->argv)++;
+
+		if(t->argc == 0){
+			exitstatus = EXIT_FAILURE;
+		}else{
+		        gettimeofday(&start, NULL);
+		        exitstatus = execute_shellcmd(t);
+			gettimeofday(&end, NULL);
+	
+		        diff = 1000000 * (end.tv_sec - start.tv_sec) + end.tv_usec - start.tv_usec;
+		        printf("The execution time is %ldmsec\n", diff); //one last step to report to stderr stream
+		
+		        exitstatus    = EXIT_SUCCESS;
+		}
+		(t->argv)--;
+	}
 	else {				// normal, exit commands
-		printf("hello");
 		each_cmd(t);
 		exitstatus	= EXIT_SUCCESS;
 	}
