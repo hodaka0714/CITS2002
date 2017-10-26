@@ -1,5 +1,6 @@
 #include "myshell.h"
 #include <sys/time.h>
+#include <fcntl.h>
 /*
    CITS2002 Project 2 2017
    Name(s):		student-name1 (, student-name2)
@@ -7,7 +8,34 @@
    Date:		date-of-submission
  */
 
+
 // -------------------------------------------------------------------
+
+void infile(char *first_cmd, char **second_cmd, char *infile){
+	FILE	*fp = fopen(infile,"r");
+	char	line[BUFSIZ];
+	if(fp == NULL){
+		printf("unable to open file '%s'\n", infile);
+		exit(EXIT_FAILURE);
+	}
+	while(fgets(line, sizeof line, fp) != NULL) {
+
+	}
+	fclose(fp);
+}
+
+void outfile(char *first_cmd, char **second_cmd, char *outfile){
+	FILE	*fp = fopen(outfile,"w");
+	char	line[BUFSIZ];
+	if(fp == NULL){
+		printf("unable to create file '%s'\n", outfile);
+		exit(EXIT_FAILURE);
+	}
+	while(fgets(line, sizeof line, fp) != NULL) {
+		
+	}
+	fclose(fp);
+}
 
 bool isnumber(char *str){
 	bool judge = true;
@@ -58,62 +86,58 @@ int cmd_command(SHELLCMD *t){
 			exit(tmp_exitstatus); //exit-status of the recently executed command is used
 		}
 		else{ // if argument is typed
-			if(strcmp(t->argv[1],"EXIT_SUCCESS") == 0) strcpy(t->argv[1],"0\0");
-			// if EXIT_SUCCESS is typed at argv[1], then t->argv[1] is replaced as (string)0.
-
-			if(strcmp(t->argv[1],"EXIT_FAILURE") == 0) strcpy(t->argv[1],"1\0");
-			// if EXIT_FAILURE is typed at argv[1], then t->argv[1] is replaced as (string)1.
-			
 			if(isnumber(t->argv[1])){ // if the argument is a number
 				tmp_exitstatus = atoi(t->argv[1]); // convert from string to int
 				exitstatus	= EXIT_SUCCESS;	
 				exit(tmp_exitstatus);
 			}
 			else{ // if the argument was incorrect
-				printf("The argument is incorrect.\n");
+				printf("%s: exit: %s numeric argument required.\n",argv0,t->argv[1]);
 				exitstatus	= EXIT_FAILURE;	
 			}
 		}
 	}
 	else if(strcmp(t->argv[0], "cd")==0){
+		int check_change_dir;				
+		exitstatus = EXIT_SUCCESS;
 		if(t->argv[1] == NULL){
 			chdir(HOME);	
 		}
 		else{
 			int cd_cmd_max_len = strlen(CDPATH) + strlen(t->argv[0]);
 			char cd_cmd[cd_cmd_max_len];
-			bool hasslash = containsslash(t->argv[1]);
-			if(!hasslash){	// if the command doesn't have "/" (i.g. cd Desktop)
+			if(t->argv[1][0] != '/'){// if the command doesn't commence with "/" (i.g. cd Desktop)
 				char CDPATH_array[strlen(CDPATH)];// convert from *CDPATH to CDPATH_array[]	
 				strcpy(CDPATH_array,CDPATH);
-				const char s[2] = ":";
-				char *token;
+//				const char s[2] = ":";
+//				char *token;
 //				printf("CDPATH now is \"%s\".\n",CDPATH);
-				int i;				
-				token = strtok(CDPATH_array,s);
-				while(token != NULL){
+//				token = strtok(CDPATH_array,s);
+//				while(token != NULL){
 					memset(cd_cmd, '\0', cd_cmd_max_len);
 					strcat(cd_cmd, HOME);
 					strcat(cd_cmd, "/");
-					strcat(cd_cmd, token);
+//					strcat(cd_cmd, token);
 					strcat(cd_cmd, t->argv[1]);
-					printf("chdir(%s) is executed.\n",cd_cmd);
-					i = chdir(cd_cmd);
-					printf("%d\n",i);
-					token = strtok(NULL, s);
-				}	
-			}else{	// if the command has "/" (i.g. "cd /desktop" and "cd desktop/directory")
+//					printf("chdir(%s) is executed.\n",cd_cmd);
+					check_change_dir = chdir(cd_cmd);
+					if(check_change_dir == -1){
+						exitstatus = EXIT_FAILURE;
+					}
+//					token = strtok(NULL, s);
+//				}
+			}
+			else{	// if the command has "/" (i.g. "cd /desktop")
 				memset(cd_cmd, '\0', cd_cmd_max_len);
 				strcat(cd_cmd, HOME);
-				if(t->argv[1][0] != '/'){
-					strcat(cd_cmd, "/");
-				}
 				strcat(cd_cmd, t->argv[1]);
 				printf("chdir(%s) is executed.\n",cd_cmd);
-				chdir(cd_cmd);	
+				check_change_dir = chdir(cd_cmd);	
+				if(check_change_dir == -1){
+					exitstatus = EXIT_FAILURE;
+				}
 			}
 		}
-		exitstatus	= EXIT_SUCCESS;	
 	}
 	else if(strcmp(t->argv[0], "time") == 0){
 	        struct	timeval	start;
@@ -133,33 +157,52 @@ int cmd_command(SHELLCMD *t){
 			gettimeofday(&end, NULL);
 	
 		        diff = 1000000 * (end.tv_sec - start.tv_sec) + end.tv_usec - start.tv_usec;
-		        printf("The execution time is %ldmsec\n", diff); //one last step to report to stderr stream
+		        fprintf(stderr,"%ldmsec\n", diff); //one last step to report to stderr stream
 		
 		        exitstatus    = EXIT_SUCCESS;
 		}
 		(t->argv)--;
 	}
-	else {				// normal, exit commands
+	else {			// command not including "exit" "cd" "time"
 		int pid = fork();
-	
+
 		// ensure that a new process was created
 		if(pid == -1) {                             // process creation failed
 			printf("fork() failed. (pid == -1)\n" );
 			exit(EXIT_FAILURE);
 		}	
 		else if(pid == 0){
+			
+			printf("!!!%s!!!\n",t->outfile);		        
+
 			bool hasslash = containsslash(t->argv[0]);
 			int cmd_max_len = strlen(PATH) + strlen(t->argv[0]) + strlen("/");
 			char cmd[cmd_max_len];
+			int fd, backup;
+			backup = dup(1);
 			if(hasslash){
 				if(t->argv[0][0] == '/'){
-					execv(t->argv[0],t->argv);
+					if(t->outfile != NULL){
+						fd = open(t->outfile, O_CREAT | O_WRONLY | O_TRUNC);
+						dup2(fd, 1);
+						execv(t->argv[0],t->argv);
+					}else{
+						execv(t->argv[0],t->argv);
+					}
 				}else{
 					strcat(cmd,"/");
 					strcat(cmd,t->argv[0]);
 					strcpy(t->argv[0],cmd);
-					execv(t->argv[0],t->argv);
+					if(t->outfile != NULL){
+						fd = open(t->outfile, O_CREAT | O_WRONLY | O_TRUNC);
+						dup2(fd, 1);
+						execv(t->argv[0],t->argv);
+					}else{
+						execv(t->argv[0],t->argv);
+					}
 				}
+			dup2(backup,1);
+			close(backup);
 				printf("execv() failed. (pid == 0)\n");
 		        	exit(EXIT_FAILURE);	
 			}
@@ -174,9 +217,18 @@ int cmd_command(SHELLCMD *t){
 					strcat(cmd, "/");
 					strcat(cmd, t->argv[0]);
 		//			printf("%s\n",cmd);
-					execv(cmd, t->argv);
+					if(t->outfile != NULL){
+						fd = open(t->outfile, O_CREAT | O_WRONLY | O_TRUNC);
+						dup2(fd, 1);
+						execv(cmd,t->argv);
+					}else{
+						execv(cmd,t->argv);
+					}
+//					execv(cmd, t->argv);
 					token = strtok(NULL, s);
 				}
+			dup2(backup,1);
+			close(backup);
 				printf("execv() failed. (pid == 0)\n");
 		        	exit(EXIT_FAILURE);	
 			}
@@ -188,6 +240,8 @@ int cmd_command(SHELLCMD *t){
 			}	
 			
 		}
+
+	
 		fflush(stdout);
 		exitstatus	= EXIT_SUCCESS;
 	}
