@@ -10,7 +10,8 @@
 
 
 // -------------------------------------------------------------------
-
+char *subshell_infile, *subshell_outfile;
+bool subshell_append;
 
 bool isnumber(char *str){
     bool judge = true;
@@ -47,12 +48,6 @@ void step1_2(){
     step2_arguments[b++] = "-y";
     execv(step2_arguments[0],step2_arguments);
 }
-
-
-//void step6_1(SHELLCMD *t){//read filecommand, return a string
-//
-//
-//}
 
 
 //This function create child process.
@@ -150,65 +145,78 @@ int cmd_command(SHELLCMD *t){
             exit(EXIT_FAILURE);
         }
         else if(pid == 0){
-            
-            printf("!!!%s!!!\n",t->outfile);
-            
-            bool hasslash = containsslash(t->argv[0]);
             int cmd_max_len = strlen(PATH) + strlen(t->argv[0]) + strlen("/");
             char cmd[cmd_max_len];
             int fd, backup;
             backup = dup(1);
-            
-            if(hasslash){
-                if(t->argv[0][0] == '/'){
-                    if(t->infile != NULL){
+            if(t->argv[0][0] == '/'){
+                // i.e.(/usr/bin/sort -k 2),(/usr/bin/sort -k 2 < a.txt),(/sort -k 2 < a.txt)
+                if(t->outfile != NULL || subshell_outfile != NULL){ //i.e.(/bin/ls > e.txt),(/bin/ls >> e.txt)
+                    if(t->append == false){     // i.e.(/bin/ls > e.txt) good!
+                        printf("hello0\n");
+                        fd = open(t->outfile, O_CREAT | O_WRONLY | O_TRUNC);
+                    }else{                      // i.e.(/bin/ls >> e.txt) good!
+                        printf("hello1\n");
+                        fd = open(t->outfile, O_CREAT | O_WRONLY | O_APPEND);
+                    }
+                    
+                    if(t->infile != NULL || subshell_infile != NULL){           // i.e.(/usr/bin/sort -k 2 < a.txt > e.txt) good!
                         char *new_argv[t->argc + 1];
                         
                         for(int i = 0; i < t->argc; i++){
                             new_argv[i] = t->argv[i];
                         }
-                        new_argv[t->argc] = t->infile;
+                        
+                        if(subshell_infile != NULL){
+                            new_argv[t->argc] = subshell_infile;
+                        }else{
+                            new_argv[t->argc] = t->infile;
+                        }
+                        
+                        new_argv[t->argc + 1] = NULL;
+                        dup2(fd, 1);
+                        execv(t->argv[0], new_argv);
+                        printf("%s: comment not found: %s .\n",argv0,t->argv[0]);
+                    }else{      //(i.e. )
+                        printf("hello2\n");
+                        dup2(fd, 1);
+                        execv(t->argv[0],t->argv);
+                        printf("%s: comment not found: %s .\n",argv0,t->argv[0]);
+                    }
+                }else if(t->outfile == NULL && subshell_outfile == NULL){
+                    // subshell_outfile == t->outfile == NULL (i.e. (/bin/ls),(/usr/bin/sort < z.txt))
+                    if(t->infile != NULL || subshell_infile != NULL){           // i.e.(/usr/bin/sort -k 2 < z.txt)
+                        char *new_argv[t->argc + 1];
+                        
+                        for(int i = 0; i < t->argc; i++){
+                            new_argv[i] = t->argv[i];
+                        }
+                        
+                        if(subshell_infile != NULL){
+                            new_argv[t->argc] = subshell_infile;
+                        }else{
+                            new_argv[t->argc] = t->infile;
+                        }
+                        
                         new_argv[t->argc + 1] = NULL;
                         execv(t->argv[0], new_argv);
-                    }
-                    
-                    if(t->outfile != NULL){
-                        if(t->append == false){
-                            fd = open(t->outfile, O_CREAT | O_WRONLY | O_TRUNC);
-                        }else{
-                            fd = open(t->outfile, O_CREAT | O_WRONLY | O_TRUNC | O_APPEND);
-                        }
-                        dup2(fd, 1);
+                        printf("%s: comment not found: %s .\n",argv0,t->argv[0]);
+                    }else{          // i.e. (/bin/ls),(/usr/bin/cal -y)
+                        printf("hello3\n");
                         execv(t->argv[0],t->argv);
-                    }else{
-                        execv(t->argv[0],t->argv);
-                    }
-                    
-                }else{
-                    strcat(cmd,"/");
-                    strcat(cmd,t->argv[0]);
-                    strcpy(t->argv[0],cmd);
-                    if(t->outfile != NULL){
-                        if(t->append == false){
-                            fd = open(t->outfile, O_CREAT | O_WRONLY | O_TRUNC);
-                        }else{
-                            fd = open(t->outfile, O_CREAT | O_WRONLY | O_TRUNC | O_APPEND);
-                        }
-                        dup2(fd, 1);
-                        execv(t->argv[0],t->argv);
-                    }else{
-                        execv(t->argv[0],t->argv);
+                        printf("%s: comment not found: %s .\n",argv0,t->argv[0]);
                     }
                 }
+                
+
+                
                 dup2(backup,1);
                 close(backup);
                 
                 printf("execv() failed. (pid == 0)\n");
                 exit(EXIT_FAILURE);
-            }
-            
-            
-            else{
+            }else{
+                // Not start with '/' i.e.( usr/bin/sort -k 2),(sort -k 2 < z.txt),(sort < z.txt)
                 const char s[2] = ":";
                 char *token;
                 token = strtok(PATH,s);
@@ -218,38 +226,86 @@ int cmd_command(SHELLCMD *t){
                     strcat(cmd, token);
                     strcat(cmd, "/");
                     strcat(cmd, t->argv[0]);
-                    if(t->infile != NULL){          // (i.g. sort -k 2 < z.txt)
-                        char *new_argv[t->argc + 2];
-
-                        for(int i = 0; i < t->argc; i++){
-                            if(i == 0){new_argv[0] = cmd;}
-                            else{new_argv[i] = t->argv[i];}
+                    printf("%s",subshell_infile);
+                    if(subshell_outfile != NULL){
+                        if(subshell_append == false){
+                            fd = open(subshell_outfile, O_CREAT | O_WRONLY | O_TRUNC);
+                        }else{
+                            fd = open(subshell_outfile, O_CREAT | O_WRONLY | O_APPEND);
                         }
-
-                        new_argv[t->argc] = t->infile;
-                        new_argv[t->argc + 1] = NULL;
-
-                        execv(new_argv[0],new_argv);
-                    }
-                    
-                    if(t->outfile != NULL){
-                        if(t->append == false){     // (i.g. cal -y > a.txt)
+                        if(t->infile != NULL || subshell_infile != NULL){
+                            // i.g. (sort -k 2 < z.txt) good!
+                            char *new_argv[t->argc + 2];
+                                for(int i = 0; i < t->argc; i++){
+                                if(i == 0){new_argv[0] = cmd;}
+                                else{new_argv[i] = t->argv[i];}
+                            }
+                            if(subshell_infile != NULL){
+                                new_argv[t->argc] = subshell_infile;
+                            }else{
+                                new_argv[t->argc] = t->infile;
+                            }
+                            new_argv[t->argc + 1] = NULL;
+                            dup2(fd, 1);
+                            execv(new_argv[0], new_argv);
+                        }else{  // i.e. ((ls) > c.txt)good!
+                            dup2(fd, 1);
+                            execv(cmd,t->argv);
+                        }
+                    }else if(t->outfile != NULL){
+                        if(t->append == false){     // (i.g. cal > a.txt(t->outfile)) good!
+                            printf("hello10\n");
                             fd = open(t->outfile, O_CREAT | O_WRONLY | O_TRUNC);
-                        }else{                      // (i.g. cal -y >> a.txt)
-                            fd = open(t->outfile, O_CREAT | O_WRONLY | O_TRUNC | O_APPEND);
+                        }else{                      // (i.g. cal -y >> a.txt) good!
+                            fd = open(t->outfile, O_CREAT | O_WRONLY | O_APPEND);
+                            printf("hello11\n");
                         }
-                        dup2(fd, 1);
-                        execv(cmd,t->argv);
-                    }else{                          // (i.g. cal -y)
-                        execv(cmd,t->argv);
+                        
+                        if(t->infile != NULL || subshell_infile != NULL){
+                            // (i.g. sort -k 2 < z.txt > d.txt) good!
+                            char *new_argv[t->argc + 2];
+                            for(int i = 0; i < t->argc; i++){
+                                if(i == 0){new_argv[0] = cmd;}
+                                else{new_argv[i] = t->argv[i];}
+                            }
+                            if(subshell_infile != NULL){
+                                new_argv[t->argc] = subshell_infile;
+                            }else{
+                                new_argv[t->argc] = t->infile;
+                            }
+                            new_argv[t->argc + 1] = NULL;
+                            dup2(fd, 1);
+                            execv(new_argv[0], new_argv);
+                        }else if(t->infile == NULL && subshell_infile == NULL){      // (i.e. ls > c.txt) good!
+                            dup2(fd, 1);
+                            execv(cmd,t->argv);
+                        }
                     }
-                    
+                    else{                   // subshell_outfile == t->outfile == NULL (i.g. (ls),(sort -k 2 < z.txt),(cal -y))
+                        if(t->infile != NULL || subshell_infile != NULL){
+                            // (i.g. sort -k 2 < z.txt)
+                            char *new_argv[t->argc + 2];
+                            for(int i = 0; i < t->argc; i++){
+                                if(i == 0){new_argv[0] = cmd;}
+                                else{new_argv[i] = t->argv[i];}
+                            }
+                            if(subshell_infile != NULL){
+                                new_argv[t->argc] = subshell_infile;
+                            }else{
+                                new_argv[t->argc] = t->infile;
+                            }
+                            new_argv[t->argc + 1] = NULL;
+//                            for(int i = 0; i <= 2; i++){printf("%s\n",new_argv[i]);}
+                            execv(new_argv[0], new_argv);
+                        }else{          // (i.e. (ls),(cal -y))
+                            execv(cmd, t->argv);
+                        }
+                    }
                     token = strtok(NULL, s);
                 }
+                printf("%s: comment not found: %s .\n", argv0, t->argv[0]);
                 dup2(backup,1);
                 close(backup);
-                
-                printf("execv() failed. (pid == 0)\n");
                 exit(EXIT_FAILURE);	
             }
         }
@@ -257,8 +313,7 @@ int cmd_command(SHELLCMD *t){
             int status;
             while(wait(&status) > 0){
                 
-            }	
-            
+            }
         }
         
         fflush(stdout);
@@ -293,6 +348,10 @@ int execute_shellcmd(SHELLCMD *t)
             exitstatus = 0;
         }
     }else if(t->type == CMD_SUBSHELL){
+        subshell_infile = t->infile;
+        subshell_outfile = t->outfile;
+        subshell_append = t->append;
+        printf("%s %s\n",subshell_infile, subshell_outfile);
         exitstatus = execute_shellcmd(t->left);
     }
     
