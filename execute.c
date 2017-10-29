@@ -136,7 +136,6 @@ void step6_newarg(SHELLCMD *t,int num,int fd) {//not very good
 void step6_newargsub(SHELLCMD *t,int fd,char *cmd){
     char *new_argv[t->argc + 2];
     for(int i = 0; i < t->argc; i++){
-        //new_argv[i] = t->argv[i];
         if(i == 0){new_argv[0] = cmd;}
         else{new_argv[i] = t->argv[i];}
     }
@@ -153,55 +152,55 @@ void step6_newargsub(SHELLCMD *t,int fd,char *cmd){
 
 
 int pipeline(SHELLCMD *t){
-    printf("gello1\n");
     int exitstatus = 0;
     
-    int pipefd[2];
-    if (pipe(pipefd) < 0) {
-        perror("pipe");
-        exit(-1);
+    int pid = fork();
+    // ensure that a new process was created
+    if(pid == -1) {                             // process creation failed
+        printf("fork() failed. (pid == -1)\n" );
+        exit(EXIT_FAILURE);
+    }else if(pid == 0){
+        int pipefd[2];
+        if (pipe(pipefd) < 0) {
+            perror("pipe");
+            exit(-1);
+        }
+        pid_t pid = fork();
+        if (pid < 0) {
+            perror("fork");
+            exit(-1);
+        } else if (pid == 0) {
+            close(pipefd[0]);
+            dup2(pipefd[1], STDOUT_FILENO);
+            close(pipefd[1]);
+            exitstatus = execute_shellcmd(t->left);
+            exit(1);
+        } else {
+            close(pipefd[1]);
+            dup2(pipefd[0], STDIN_FILENO);
+            close(pipefd[0]);
+            pid_t pid1 = fork();
+            if (pid1 < 0) {
+                perror("fork\n");
+                exit(-1);
+            } else if (pid1 == 0) {
+                exitstatus = execute_shellcmd(t->right);
+                exit(1);
+            }
+            else{
+                int status;
+                while(wait(&status) > 0){
+                }
+            }
+            exit(1);
+        }
     }
-    
-    pid_t pid = fork();
-    if (pid < 0) {
-        perror("fork");
-        exit(-1);
-    } else if (pid == 0) {
-        // 子プロセス
-        close(pipefd[0]); //書き込みをクローズ
-        
-        
-        dup2(pipefd[1], STDOUT_FILENO); 
-        close(pipefd[1]);              
-        
-//        char *hello2[4] = {"ls","-l", NULL};
-//        execv("/bin/ls",hello2);
-        
-        
-//        execl("/usr/bin/sort", "sort","-k","+4", NULL);
-//        execl("/bin/cat", "/bin/cat", NULL); 
-    
-//       printf("execute_shellcmd(t->right)\n");
-//        
-//        exitstatus = execute_shellcmd(t->left);
-        perror("/bin/cat");
-    } else {
-        // 親プロセス
-        close(pipefd[1]); 
-        dup2(pipefd[0], STDIN_FILENO); 
-        close(pipefd[0]);
-//        char *s = "send from parent";
-//        write(pipefd[1], s, strlen(s));
-//        execl("/bin/ls", "ls","-l", NULL);
-        
-//        char *hello[5] = {"sort","-k","+4", NULL};
-//        execv("/usr/bin/sort",hello);
-//
-//        printf("gello2\n");
-        
-//        exitstatus = execute_shellcmd(t->right);
-        
-    }
+// not sure this part is necessary
+//    else{
+//        int status;
+//        while(wait(&status) > 0){
+//        }
+//    }
     return exitstatus;
 }
 
@@ -231,7 +230,7 @@ int cmd_command(SHELLCMD *t){
     }
     // step 3 . cd
     else if(strcmp(t->argv[0], "cd")==0){
-       exitstatus= step3_cd(t,exitstatus);
+        exitstatus= step3_cd(t,exitstatus);
     }
     //step 3 time
     else if(strcmp(t->argv[0], "time") == 0){
@@ -256,7 +255,7 @@ int cmd_command(SHELLCMD *t){
                 // i.e.(/usr/bin/sort -k 2),(/usr/bin/sort -k 2 < a.txt),(/sort -k 2 < a.txt)
                 if(t->outfile != NULL || subshell_outfile != NULL){ //i.e.(/bin/ls > e.txt),(/bin/ls >> e.txt)
                     fd = check_append(t->outfile,t);
-//                    //if(t->append == false){     // i.e.(/bin/ls > e.txt) good!
+                    //                    //if(t->append == false){     // i.e.(/bin/ls > e.txt) good!
                     if(t->infile != NULL || subshell_infile != NULL){           // i.e.(/usr/bin/sort -k 2 < z.txt > e.txt) good!
                         step6_newarg(t,t->argc + 1,fd);
                     }else{
@@ -339,8 +338,8 @@ int cmd_command(SHELLCMD *t){
                             new_argv[t->argc + 1] = NULL;
                             execv(new_argv[0], new_argv);
                         }else{          // (i.e. (ls),(cal -y))
-//                            char *hello[2] = {"ls","-l",NULL};
-//                            execv("/bin/ls",hello);
+                            //                            char *hello[2] = {"ls","-l",NULL};
+                            //                            execv("/bin/ls",hello);
                             execv(cmd, t->argv);
                         }
                     }
@@ -396,7 +395,6 @@ int execute_shellcmd(SHELLCMD *t)
         subshell_append = t->append;
         exitstatus = execute_shellcmd(t->left);
     }else if(t->type == CMD_PIPE){
-        printf("hello %d\n",t->right->argc);
         exitstatus = pipeline(t);
     }
     
