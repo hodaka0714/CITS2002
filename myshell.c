@@ -14,7 +14,6 @@ int main(int argc, char *argv[])
     argc--;				// skip 1st command-line argument
     argv++;
 
-	printf("!%d! !%s! !%s! !%s!",argc,argv[0],argv[1],argv[2]);
 
 //  INITIALIZE THE THREE INTERNAL VARIABLES
     HOME	= getenv("HOME");
@@ -40,11 +39,11 @@ int main(int argc, char *argv[])
 //  READ AND EXECUTE COMMANDS FROM stdin UNTIL IT IS CLOSED (with control-D)
     while(!feof(stdin)) {
 	SHELLCMD	*t = parse_shellcmd(stdin);
-	printf("t->argv[0] -> %s\n",t->argv[0]);
+//	printf("t->argv[0] -> %s\n",t->argv[0]);
 	if(t != NULL) {
 
 //  WE COULD DISPLAY THE PARSED COMMAND-TREE, HERE, BY CALLING:
-	    print_shellcmd(t);
+//	    print_shellcmd(t);
 
 	    exitstatus = execute_shellcmd(t); 
 	    free_shellcmd(t);
