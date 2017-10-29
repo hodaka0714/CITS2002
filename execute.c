@@ -168,178 +168,40 @@ int pipeline(SHELLCMD *t){
         exit(-1);
     } else if (pid == 0) {
         // 子プロセス
-        close(pipefd[1]); //書き込みをクローズ
+        close(pipefd[0]); //書き込みをクローズ
         
         
-        dup2(pipefd[0], STDIN_FILENO); //パイプの読み込みを標準入力につなぐ
-        close(pipefd[0]);              //つないだらパイプはクローズする
+        dup2(pipefd[1], STDOUT_FILENO); 
+        close(pipefd[1]);              
         
-//                char *hello[5] = {"sort","-k","+4", NULL};
-//                execv("/usr/bin/sort",hello);
+//        char *hello2[4] = {"ls","-l", NULL};
+//        execv("/bin/ls",hello2);
+        
         
 //        execl("/usr/bin/sort", "sort","-k","+4", NULL);
-//        execl("/bin/cat", "/bin/cat", NULL); //catは標準入力のデータをそのまま出力するコマンド
+//        execl("/bin/cat", "/bin/cat", NULL); 
     
 //       printf("execute_shellcmd(t->right)\n");
-        exitstatus = execute_shellcmd(t->right);
-        
+//        
+//        exitstatus = execute_shellcmd(t->left);
         perror("/bin/cat");
     } else {
         // 親プロセス
-        close(pipefd[0]); //読み込みをクローズ
-        dup2(pipefd[1], STDOUT_FILENO); //パイプのshutsuryokuを標準shutsuryokuにつなぐ
-        
+        close(pipefd[1]); 
+        dup2(pipefd[0], STDIN_FILENO); 
+        close(pipefd[0]);
 //        char *s = "send from parent";
 //        write(pipefd[1], s, strlen(s));
 //        execl("/bin/ls", "ls","-l", NULL);
         
-//        char *hello2[4] = {"ls","-l", NULL};
-//        execv("/bin/ls",hello2);
-        
-//        printf("gello2\n");
-        exitstatus = execute_shellcmd(t->left);
-        
-        close(pipefd[1]);
-    }
-//    
-//    int     fd[2];
-//    pid_t   childpid;
-//    
-//    pipe(fd);
-//    
-//    if((childpid = fork()) == -1)
-//    {
-//        printf("gello1.1\n");
-//        perror("fork");
-//        exit(1);
-//    }
-//    
-//    if(childpid == 0)
-//    {
-//        printf("gello1.2\n");
-//        /* Child process closes up input side of pipe */
-//        printf("gello1.5\n");
-//        dup2(fd[0], 0);
-//        printf("gello2\n");
-//        close(fd[0]);
-//        char *hello2[4] = {"ls","-l", NULL};
-//        execv("/bin/ls",hello2);
-//        exit(0);
-//    }
-//    else
-//    {
-//        /* Parent process closes up output side of pipe */
-//        printf("gello3\n");
-//        dup2(fd[1], 1);
-//        printf("gello4\n");
-//        close(fd[0]);
-//        
-//        /* Read in a string from the pipe */
-//        
-//        char *hello[5] = {"sort","-k","4", NULL};
+//        char *hello[5] = {"sort","-k","+4", NULL};
 //        execv("/usr/bin/sort",hello);
-//    }
-    
-    
-    
-    
-    
-//    // Set up for fork
-//    pid_t pid;
 //
-//    // Set up pipe
-//    int thePipe[2];
-//
-//    if(pipe(thePipe) == -1)
-//    {
-//        printf("Pipe Failed\n");
-//        exit(1);
-//    }
-//    
-//    // Do Fork
-//    if ((pid = fork()) > 0) // Parent
-//    {
-//        // Close pipe ends pointing stdout to the pipe input
-//        close(thePipe[0]);
-//        char *hello[5] = {"sort","-k","4", NULL};
-//        execv("/usr/bin/sort",hello);
-////        exitstatus = execute_shellcmd(t->left);
-//        // Code that writes to stdout
-//        
-//    }
-//    else if (pid == 0) // Child
-//    {
-//        // Close pipe ends pointing output of the pipe to stdin
-//        dup2(thePipe[0], 0);
-//        close(thePipe[0]);
-//        close(thePipe[1]);
-//        char *hello2[4] = {"ls","-l", NULL};
-//        execv("/bin/ls",hello2);
-////        exitstatus = execute_shellcmd(t->right);
-//        // Code including system calls that read from stdin
-//    }
-    
-//    printf("hello1\n");
-//    printf("hello222\n");
-//    printf("hello223\n");
-//    int exitstatus = 0;
-//    printf("hello224\n");
-//    //int waitstatus= -10;
-//    int	writepipe[2] = {-1,-1},	readpipe[2] = {-1,-1};	/* parent->child child -> parent */
-//    pid_t childpid;
-//    printf("hello225\n");
-//    /*------------------------------------------------------------------------
-//     * CREATE THE PAIR OF PIPES
-//     *
-//     * Pipes have two ends but just one direction: to get a two-way
-//     * conversation you need two pipes. It's an error if we cannot make
-//     * them both, and we define these macros for easy reference.
-//     */
-//    writepipe[0] = -1;
-//    printf("hello226\n");
-//    if (pipe(readpipe) < 0  ||  pipe(writepipe) < 0)
-//    {
-//        perror("Failed ro reset pipeline");
-//        /* close readpipe[0] & [1] if necessary */
-//    }
-//    printf("hello227\n");
-//#define	PARENT_READ	readpipe[0]
-//#define	CHILD_WRITE	readpipe[1]
-//#define CHILD_READ	writepipe[0]
-//#define PARENT_WRITE	writepipe[1]
-//    printf("hello228\n");
-//    if((childpid = fork()) < 0)
-//    {
-//        perror("Failed to redirect stdout of t->left\n");
-//    }
-//     if(childpid == 0 )	/* in the child */
-//    {
-//        printf("hello229\n");
-//        close(PARENT_WRITE);
-//        printf("hello230\n");
-//        close(PARENT_READ);
-//        printf("hello231\n");
-//        dup2(CHILD_READ,  0);
-//        close(CHILD_READ);
-//        printf("hello232\n");
-//        dup2(CHILD_WRITE, 1);
-//        close(CHILD_WRITE);
-//        exitstatus = execute_shellcmd(t->left);
-//
-//        
-//    }
-//    else //if ( childpid != 0 )				/* in the parent */
-//    {
-//        //wait(&waitstatus);
-//        printf("hello233\n");
-//        close(CHILD_READ);
-//        printf("hello234\n");
-//        close(CHILD_WRITE);
-//        printf("hello235\n");
+//        printf("gello2\n");
+        
 //        exitstatus = execute_shellcmd(t->right);
-//
-//    }
-    
+        
+    }
     return exitstatus;
 }
 
