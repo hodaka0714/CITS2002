@@ -15,6 +15,8 @@
 
 #define MODE_CREATE (O_CREAT | O_WRONLY | O_TRUNC)
 #define MODE_APPEND (O_CREAT | O_WRONLY | O_APPEND)
+#define TMP_FILENAME            "/tmp/tmp_command"
+#define TMP_FILENAME2            "tmp_command3"
 
 char *subshell_infile, *subshell_outfile;
 bool subshell_append;
@@ -43,6 +45,26 @@ void step1_2(){
     step2_arguments[b++] = NULL;
     step2_arguments[b++] = "-y";
     execv(step2_arguments[0],step2_arguments);
+}
+
+int step3_exit(SHELLCMD *t, int exitstatus){
+    int tmp_exitstatus = 0;// the exit-status of the recently executed command should be assigned
+    if(t->argv[1] == NULL){ // if there was no argument
+        exitstatus	= EXIT_SUCCESS;
+        exit(tmp_exitstatus); //exit-status of the recently executed command is used
+    }
+    else{ // if argument is typed
+        if(isnumber(t->argv[1])){ // if the argument is a number
+            tmp_exitstatus = atoi(t->argv[1]); // convert from string to int
+            exitstatus	= EXIT_SUCCESS;
+            exit(tmp_exitstatus);
+        }
+        else{ // if the argument was incorrect
+            printf("%s: exit: %s numeric argument required.\n",argv0,t->argv[1]);
+            exitstatus	= EXIT_FAILURE;
+        }
+    }
+    return exitstatus;
 }
 
 int step3_cd(SHELLCMD *t, int exitstatus){
@@ -149,9 +171,131 @@ void step6_newargsub(SHELLCMD *t,int fd,char *cmd){
     execv(new_argv[0], new_argv);
 }
 
+int others_cmd_command(SHELLCMD *t,int exitstatus){
+    int pid = fork();
+    // ensure that a new process was created
+    if(pid == -1) {                             // process creation failed
+        printf("fork() failed. (pid == -1)\n" );
+        exit(EXIT_FAILURE);
+    }
+    else if(pid == 0){
+        int cmd_max_len = strlen(PATH) + strlen(t->argv[0]) + strlen("/");
+        char cmd[cmd_max_len];
+        int fd, backup;
+        backup = dup(1);
+        //start with '/'
+        if(t->argv[0][0] == '/'){
+            // i.e.(/usr/bin/sort -k 2),(/usr/bin/sort -k 2 < a.txt),(/sort -k 2 < a.txt)
+            if(t->outfile != NULL || subshell_outfile != NULL){ //i.e.(/bin/ls > e.txt),(/bin/ls >> e.txt)
+                fd = check_append(t->outfile,t);
+                // i.e.(/bin/ls > e.txt) good!
+                if(t->infile != NULL || subshell_infile != NULL){   // i.e.(/usr/bin/sort -k 2 < z.txt > e.txt) good!
+                    step6_newarg(t,t->argc + 1,fd);
+                }else{
+                    printf("hello2\n");
+                    dup2(fd, 1);
+                    execv(t->argv[0],t->argv);
+                    printf("%s: comment not found: %s .\n",argv0,t->argv[0]);
+                }
+            }else if(t->outfile == NULL && subshell_outfile == NULL){
+                // subshell_outfile == t->outfile == NULL (i.e. (/bin/ls),(/usr/bin/sort < z.txt))
+                if(t->infile != NULL || subshell_infile != NULL){           // i.e.(/usr/bin/sort -k 2 < z.txt)
+                    char *new_argv[t->argc + 1];
+                    
+                    for(int i = 0; i < t->argc; i++){
+                        new_argv[i] = t->argv[i];
+                    }
+                    
+                    if(subshell_infile != NULL){
+                        new_argv[t->argc] = subshell_infile;
+                    }else{
+                        new_argv[t->argc] = t->infile;
+                    }
+                    
+                    new_argv[t->argc + 1] = NULL;
+                    execv(t->argv[0], new_argv);
+                    printf("%s: comment not found: %s .\n",argv0,t->argv[0]);
+                }else{          // i.e. (/bin/ls),(/usr/bin/cal -y)
+                    execv(t->argv[0],t->argv);
+                    printf("%s: comment not found: %s .\n",argv0,t->argv[0]);
+                }
+            }
+            dup2(backup,1);
+            close(backup);
+            printf("execv() failed. (pid == 0)\n");
+            exit(EXIT_FAILURE);
+        }else{
+            // Not start with '/' i.e.( usr/bin/sort -k 2),(sort -k 2 < z.txt),(sort < z.txt)
+            const char s[2] = ":";
+            char *token;
+            token = strtok(PATH,s);
+            while(token != NULL){
+                memset(cmd, '\0', cmd_max_len);
+                strcat(cmd, token);
+                strcat(cmd, "/");
+                strcat(cmd, t->argv[0]);
+                printf("%s",subshell_infile);
+                if(subshell_outfile != NULL){
+                    fd = check_append(subshell_outfile,t);//check append
+                    if(t->infile != NULL || subshell_infile != NULL){
+                        // i.g. (sort -k 2 < z.txt) good!
+                        step6_newargsub(t, fd,cmd);
+                    }else{  // i.e. ((ls) > c.txt)good!
+                        dup2(fd, 1);
+                        execv(cmd,t->argv);
+                    }
+                }else if(t->outfile != NULL){
+                    fd = check_append(t->outfile,t);                    // (i.g. cal -y >> a.txt) good!
+                    if(t->infile != NULL || subshell_infile != NULL){
+                        // (i.g. sort -k 2 < z.txt > dd2.txt) good!
+                        step6_newargsub(t, fd,cmd);
+                    }else if(t->infile == NULL && subshell_infile == NULL){      // (i.e. ls > c.txt) good!
+                        dup2(fd, 1);
+                        execv(cmd,t->argv);
+                    }
+                }
+                else{   // subshell_outfile == t->outfile == NULL (i.g. (ls),(sort -k 2 < z.txt),(cal -y))
+                    if(t->infile != NULL || subshell_infile != NULL){
+                        // (i.g. sort -k 2 < z.txt)
+                        char *new_argv[t->argc + 2];
+                        for(int i = 0; i < t->argc; i++){
+                            if(i == 0){new_argv[0] = cmd;}
+                            else{new_argv[i] = t->argv[i];}
+                        }
+                        if(subshell_infile != NULL){
+                            new_argv[t->argc] = subshell_infile;
+                        }else{
+                            new_argv[t->argc] = t->infile;
+                        }
+                        new_argv[t->argc + 1] = NULL;
+                        execv(new_argv[0], new_argv);
+                    }else{          // (i.e. (ls),(cal -y))
+                        //                            char *hello[2] = {"ls","-l",NULL};
+                        //                            execv("/bin/ls",hello);
+                        execv(cmd, t->argv);
+                    }
+                }
+                token = strtok(NULL, s);
+            }
+            
+           // printf("%s: comment not found: %s .\n", argv0, t->argv[0]);
+            dup2(backup,1);
+            close(backup);
+            exit(EXIT_FAILURE);
+        }
+    }
+    else{
+        int status;
+        while(wait(&status) > 0){
+            
+        }
+    }
+    fflush(stdout);
+    exitstatus	= EXIT_SUCCESS;
+    return exitstatus;
+}
 
-
-int pipeline(SHELLCMD *t){
+int step7_pipeline(SHELLCMD *t){
     int exitstatus = 0;
     
     int pid = fork();
@@ -160,49 +304,103 @@ int pipeline(SHELLCMD *t){
         printf("fork() failed. (pid == -1)\n" );
         exit(EXIT_FAILURE);
     }else if(pid == 0){
+        
+        // make another new process
         int pipefd[2];
         if (pipe(pipefd) < 0) {
             perror("pipe");
-            exit(-1);
+            exit(EXIT_FAILURE);
         }
-        pid_t pid = fork();
-        if (pid < 0) {
+        pid_t pid2 = fork();
+        // ensure that a new process was created
+        if (pid2 < 0) {  // process creation failed
             perror("fork");
-            exit(-1);
-        } else if (pid == 0) {
+            exit(EXIT_FAILURE);
+        }else if(pid2 == 0) {
             close(pipefd[0]);
             dup2(pipefd[1], STDOUT_FILENO);
             close(pipefd[1]);
             exitstatus = execute_shellcmd(t->left);
-            exit(1);
-        } else {
+            exit(EXIT_SUCCESS);
+        }else{
             close(pipefd[1]);
             dup2(pipefd[0], STDIN_FILENO);
             close(pipefd[0]);
-            pid_t pid1 = fork();
-            if (pid1 < 0) {
-                perror("fork\n");
-                exit(-1);
-            } else if (pid1 == 0) {
-                exitstatus = execute_shellcmd(t->right);
-                exit(1);
-            }
-            else{
-                int status;
-                while(wait(&status) > 0){
+            
+                // make another new process
+                pid_t pid3 = fork();
+                // ensure that a new process was created
+                if (pid3 < 0) { // process creation failed
+                    perror("fork\n");
+                    exit(EXIT_FAILURE);
+                }else if(pid3 == 0) {
+                    exitstatus = execute_shellcmd(t->right);
+                    exit(EXIT_SUCCESS);
+                }else{
+                    int status3;
+                    while(wait(&status3) > 0){
+                    }
                 }
+            
+            int status2;
+            while( wait(&status2) > 0) {
             }
-            exit(1);
+            exit(EXIT_SUCCESS);
+        }
+    }else{
+        int status;
+        while(wait(&status) > 0){
         }
     }
-// not sure this part is necessary
-//    else{
-//        int status;
-//        while(wait(&status) > 0){
-//        }
-//    }
     return exitstatus;
 }
+
+int step8_shellscript(SHELLCMD *t,int exitstatus){
+    //cmd_command(t);
+    printf("%s  %lu\n",t->argv[0],strlen(t->argv[0]));
+    char filename[strlen(t->argv[0]) - 2];
+    for(int i = 2; i < strlen(t->argv[0]); i++){
+        filename[i-2] = t->argv[0][i];
+    }
+    filename[strlen(t->argv[0]) - 2] = '\0';
+    //printf("execv fail %s\n",filename);
+    
+    
+    int rc;
+    rc = access(filename, 0);
+    if (rc == 0) {
+        printf("ファイル「filename」は存在します。%d\n", rc);
+        
+        FILE *dict = fopen(filename,"r");
+//        FILE *dict2 = fopen(TMP_FILENAME2,"a");
+//        char line[BUFSIZ];
+        //check if anything went wrong
+        if(dict == NULL){
+            exit(EXIT_FAILURE);
+        }else{
+
+                
+            while(!feof(dict)) {
+                SHELLCMD	*t = parse_shellcmd(dict);
+                if(t != NULL) {
+                    exitstatus = execute_shellcmd(t);
+                    free_shellcmd(t);
+                }
+            }
+//            }
+//            fclose(dict2);
+        }
+        fclose(dict);
+        
+    }else{
+        printf("ファイル「filename」は存在しません。%d\n", rc);
+    }
+    
+  
+    return exitstatus;
+}
+
+
 
 //This function create child process.
 int cmd_command(SHELLCMD *t){
@@ -211,156 +409,28 @@ int cmd_command(SHELLCMD *t){
         exitstatus	= EXIT_FAILURE;
     }
     else if(strcmp(t->argv[0],"exit") == 0){ // if exit is typed
-        int tmp_exitstatus = 0;// the exit-status of the recently executed command should be assigned
-        if(t->argv[1] == NULL){ // if there was no argument
-            exitstatus	= EXIT_SUCCESS;
-            exit(tmp_exitstatus); //exit-status of the recently executed command is used
-        }
-        else{ // if argument is typed
-            if(isnumber(t->argv[1])){ // if the argument is a number
-                tmp_exitstatus = atoi(t->argv[1]); // convert from string to int
-                exitstatus	= EXIT_SUCCESS;
-                exit(tmp_exitstatus);
-            }
-            else{ // if the argument was incorrect
-                printf("%s: exit: %s numeric argument required.\n",argv0,t->argv[1]);
-                exitstatus	= EXIT_FAILURE;
-            }
-        }
+    // step 3 exit
+         exitstatus= step3_exit(t, exitstatus);
     }
-    // step 3 . cd
+    // step 3 cd
     else if(strcmp(t->argv[0], "cd")==0){
         exitstatus= step3_cd(t,exitstatus);
     }
-    //step 3 time
+    // step 3 time
     else if(strcmp(t->argv[0], "time") == 0){
         exitstatus= step3_time(t,exitstatus);
     }
-    
-    //step 6.
-    else {			// command not including "exit" "cd" "time"
-        int pid = fork();
-        // ensure that a new process was created
-        if(pid == -1) {                             // process creation failed
-            printf("fork() failed. (pid == -1)\n" );
-            exit(EXIT_FAILURE);
-        }
-        else if(pid == 0){
-            int cmd_max_len = strlen(PATH) + strlen(t->argv[0]) + strlen("/");
-            char cmd[cmd_max_len];
-            int fd, backup;
-            backup = dup(1);
-            //start with '/'
-            if(t->argv[0][0] == '/'){
-                // i.e.(/usr/bin/sort -k 2),(/usr/bin/sort -k 2 < a.txt),(/sort -k 2 < a.txt)
-                if(t->outfile != NULL || subshell_outfile != NULL){ //i.e.(/bin/ls > e.txt),(/bin/ls >> e.txt)
-                    fd = check_append(t->outfile,t);
-                    //                    //if(t->append == false){     // i.e.(/bin/ls > e.txt) good!
-                    if(t->infile != NULL || subshell_infile != NULL){           // i.e.(/usr/bin/sort -k 2 < z.txt > e.txt) good!
-                        step6_newarg(t,t->argc + 1,fd);
-                    }else{
-                        printf("hello2\n");
-                        dup2(fd, 1);
-                        execv(t->argv[0],t->argv);
-                        printf("%s: comment not found: %s .\n",argv0,t->argv[0]);
-                    }
-                }else if(t->outfile == NULL && subshell_outfile == NULL){
-                    // subshell_outfile == t->outfile == NULL (i.e. (/bin/ls),(/usr/bin/sort < z.txt))
-                    if(t->infile != NULL || subshell_infile != NULL){           // i.e.(/usr/bin/sort -k 2 < z.txt)
-                        char *new_argv[t->argc + 1];
-                        
-                        for(int i = 0; i < t->argc; i++){
-                            new_argv[i] = t->argv[i];
-                        }
-                        
-                        if(subshell_infile != NULL){
-                            new_argv[t->argc] = subshell_infile;
-                        }else{
-                            new_argv[t->argc] = t->infile;
-                        }
-                        
-                        new_argv[t->argc + 1] = NULL;
-                        execv(t->argv[0], new_argv);
-                        printf("%s: comment not found: %s .\n",argv0,t->argv[0]);
-                    }else{          // i.e. (/bin/ls),(/usr/bin/cal -y)
-                        printf("hello3\n");
-                        execv(t->argv[0],t->argv);
-                        printf("%s: comment not found: %s .\n",argv0,t->argv[0]);
-                    }
-                }
-                dup2(backup,1);
-                close(backup);
-                printf("execv() failed. (pid == 0)\n");
-                exit(EXIT_FAILURE);
-            }else{
-                // Not start with '/' i.e.( usr/bin/sort -k 2),(sort -k 2 < z.txt),(sort < z.txt)
-                const char s[2] = ":";
-                char *token;
-                token = strtok(PATH,s);
-                while(token != NULL){
-                    memset(cmd, '\0', cmd_max_len);
-                    strcat(cmd, token);
-                    strcat(cmd, "/");
-                    strcat(cmd, t->argv[0]);
-                    printf("%s",subshell_infile);
-                    if(subshell_outfile != NULL){
-                        fd = check_append(subshell_outfile,t);//check append
-                        if(t->infile != NULL || subshell_infile != NULL){
-                            // i.g. (sort -k 2 < z.txt) good!
-                            step6_newargsub(t, fd,cmd);
-                        }else{  // i.e. ((ls) > c.txt)good!
-                            dup2(fd, 1);
-                            execv(cmd,t->argv);
-                        }
-                    }else if(t->outfile != NULL){
-                        fd = check_append(t->outfile,t);                    // (i.g. cal -y >> a.txt) good!
-                        if(t->infile != NULL || subshell_infile != NULL){
-                            // (i.g. sort -k 2 < z.txt > dd2.txt) good!
-                            step6_newargsub(t, fd,cmd);
-                        }else if(t->infile == NULL && subshell_infile == NULL){      // (i.e. ls > c.txt) good!
-                            dup2(fd, 1);
-                            execv(cmd,t->argv);
-                        }
-                    }
-                    else{                   // subshell_outfile == t->outfile == NULL (i.g. (ls),(sort -k 2 < z.txt),(cal -y))
-                        if(t->infile != NULL || subshell_infile != NULL){
-                            // (i.g. sort -k 2 < z.txt)
-                            char *new_argv[t->argc + 2];
-                            for(int i = 0; i < t->argc; i++){
-                                if(i == 0){new_argv[0] = cmd;}
-                                else{new_argv[i] = t->argv[i];}
-                            }
-                            if(subshell_infile != NULL){
-                                new_argv[t->argc] = subshell_infile;
-                            }else{
-                                new_argv[t->argc] = t->infile;
-                            }
-                            new_argv[t->argc + 1] = NULL;
-                            execv(new_argv[0], new_argv);
-                        }else{          // (i.e. (ls),(cal -y))
-                            //                            char *hello[2] = {"ls","-l",NULL};
-                            //                            execv("/bin/ls",hello);
-                            execv(cmd, t->argv);
-                        }
-                    }
-                    token = strtok(NULL, s);
-                }
-                printf("%s: comment not found: %s .\n", argv0, t->argv[0]);
-                dup2(backup,1);
-                close(backup);
-                exit(EXIT_FAILURE);
-            }
-        }
-        else{
-            int status;
-            while(wait(&status) > 0){
-                
-            }
-        }
-        
-        fflush(stdout);
-        exitstatus	= EXIT_SUCCESS;
+    else if((t->argv[0][0]== '.') && (t->argv[0][1]== '/')){
+       // printf("hello\n");
+        exitstatus= step8_shellscript(t,exitstatus);
     }
+    else {			// command not commence with "exit" "cd" "time"
+        // step 6
+        exitstatus=others_cmd_command(t,exitstatus);
+    }
+    
+    
+    
     return exitstatus;
 }
 
@@ -395,10 +465,13 @@ int execute_shellcmd(SHELLCMD *t)
         subshell_append = t->append;
         exitstatus = execute_shellcmd(t->left);
     }else if(t->type == CMD_PIPE){
-        exitstatus = pipeline(t);
+        exitstatus = step7_pipeline(t);
     }
+//    else if(t->argv[0][0] == '.' && t->argv[0][1] == '/'){
+//        exitstatus=step8_shellscript(t);
+//    }
+   
     
-    //	prev_exitstatus = exitstatus;
     return exitstatus;
 }
 
